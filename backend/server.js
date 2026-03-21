@@ -85,24 +85,35 @@ Return your answer in this exact JSON format:
 
 app.post("/redeem", async (req, res) => {
   try {
-    const { walletAddress, pointsToBurn } = req.body;
+    const { walletAddress, pointsToBurn, conversationId } = req.body;
 
-    if (!walletAddress || !pointsToBurn) {
+    if (!walletAddress) {
       return res.status(400).json({
-        error: "walletAddress and pointsToBurn are required",
+        success: false,
+        message: "walletAddress is required",
+      });
+    }
+
+    if (!pointsToBurn || pointsToBurn < 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Need at least 5 points to redeem",
       });
     }
 
     return res.json({
       success: true,
-      message: `Redeem request received for ${pointsToBurn} points from ${walletAddress}`,
+      message: `Redeem successful for ${pointsToBurn} points from ${walletAddress}`,
+      txDigest: "demo_tx_digest_123456",
+      rewardObjectId: "demo_reward_object_7890",
+      conversationId,
     });
   } catch (error) {
-    console.error("Redeem error:", error);
-
+    console.error("Redeem route error:", error);
     return res.status(500).json({
-      error: "Internal server error",
-      details: error.message || "Unknown error",
+      success: false,
+      message: "Redeem failed",
+      error: error.message,
     });
   }
 });
