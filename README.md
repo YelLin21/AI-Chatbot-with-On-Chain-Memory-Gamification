@@ -1,9 +1,10 @@
 # AI Chatbot with On-Chain Memory and Gamification
 
-## Short Demo Link
-https://drive.google.com/file/d/1Hiv8QPVYKThB-H56d0Mzr5SricI1DUx0/view?usp=drive_link
+### Short Demo Link
 
-End-to-end Sui Move + React + Node implementation for the AI chatbot challenge.
+## https://drive.google.com/file/d/1Hiv8QPVYKThB-H56d0Mzr5SricI1DUx0/view?usp=drive_link
+
+## End-to-end Sui Move + React + Node implementation for the AI chatbot challenge.
 
 ## What This Project Implements (Mapped to Brief)
 
