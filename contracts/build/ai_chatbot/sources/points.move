@@ -3,6 +3,11 @@ module ai_chatbot::points {
     const E_NOT_OWNER: u64 = 0;
     const E_INSUFFICIENT_POINTS: u64 = 1;
     const E_INVALID_AI_CAP: u64 = 2;
+    const E_DAILY_CAP_REACHED: u64 = 3;
+    const E_POINTS_TOO_HIGH: u64 = 4;
+
+    const DEFAULT_DAILY_CAP: u64 = 1000;
+    const MAX_POINTS_PER_MESSAGE: u64 = 200;
 
     public struct PointsAccount has key, store {
         id: UID,
@@ -10,6 +15,10 @@ module ai_chatbot::points {
         balance: u64,
         total_earned: u64,
         total_burned: u64,
+        last_earn_day: u64,
+        current_streak: u64,
+        today_earned: u64,
+        daily_cap: u64,
     }
 
     public struct PointsEvent has key, store {
@@ -35,6 +44,10 @@ module ai_chatbot::points {
             balance: 0,
             total_earned: 0,
             total_burned: 0,
+            last_earn_day: 0,
+            current_streak: 0,
+            today_earned: 0,
+            daily_cap: DEFAULT_DAILY_CAP,
         }
     }
 
@@ -58,13 +71,42 @@ module ai_chatbot::points {
         let ai = tx_context::sender(ctx);
         assert!(cap.ai_owner == ai, E_INVALID_AI_CAP);
 
-        account.balance = account.balance + points;
-        account.total_earned = account.total_earned + points;
+        assert!(points <= MAX_POINTS_PER_MESSAGE, E_POINTS_TOO_HIGH);
+
+        let day = day_from_timestamp(timestamp);
+
+        if (account.last_earn_day == 0) {
+            account.last_earn_day = day;
+            account.current_streak = 1;
+            account.today_earned = 0;
+        } else {
+            if (day > account.last_earn_day) {
+                if (day == account.last_earn_day + 1) {
+                    account.current_streak = account.current_streak + 1;
+                } else {
+                    account.current_streak = 1;
+                };
+                account.last_earn_day = day;
+                account.today_earned = 0;
+            }
+        };
+
+        let mut effective_points = points;
+        if (account.current_streak >= 3) {
+            let bonus = points / 10; // +10% streak bonus for streak >= 3
+            effective_points = points + bonus;
+        };
+
+        assert!(account.today_earned + effective_points <= account.daily_cap, E_DAILY_CAP_REACHED);
+
+        account.balance = account.balance + effective_points;
+        account.total_earned = account.total_earned + effective_points;
+        account.today_earned = account.today_earned + effective_points;
 
         PointsEvent {
             id: object::new(ctx),
             account_id: object::uid_to_inner(&account.id),
-            points,
+            points: effective_points,
             event_type: 0,
             reason,
             timestamp,
@@ -97,5 +139,14 @@ module ai_chatbot::points {
 
     public fun owner_of(account: &PointsAccount): address {
         account.owner
+    }
+
+    public fun current_streak(account: &PointsAccount): u64 {
+        account.current_streak
+    }
+
+    public fun day_from_timestamp(timestamp: u64): u64 {
+        // Treat timestamp as seconds since epoch and use 24h windows
+        timestamp / 86400
     }
 }

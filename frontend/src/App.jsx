@@ -5,7 +5,7 @@ import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 
 const PACKAGE_ID =
-  "0xdff20dd4709de0802479f95f6d0346114b59b3d4a7e99c83c8dc56776eea3987";
+  "0x8b04f9641055ae0aaf75710200dfe440db8f0b61b38864c149d9a0168df4bf3f";
 
 const generateKey = async () => {
   return await crypto.subtle.generateKey(
@@ -282,11 +282,11 @@ function App() {
           params: [
             connectedWalletAddress,
             {
-              filter: {
-                StructType: `${PACKAGE_ID}::conversation::MessageEntry`,
-              },
+              // No StructType filter here; we filter by type in code to be
+              // resilient to type-string variations between clients.
               options: {
                 showContent: true,
+                showType: true,
               },
             },
           ],
@@ -302,6 +302,9 @@ function App() {
       for (const entry of objects) {
         const content = entry?.data?.content;
         if (!content || content.dataType !== "moveObject") continue;
+
+        const objType = content.type || entry?.data?.type || "";
+        if (!objType.includes("::conversation::MessageEntry")) continue;
 
         const fields = content.fields || {};
         const convField = fields.conversation_id;
@@ -328,10 +331,84 @@ function App() {
         });
       }
 
+      // Fallback: if nothing was found via sui_getOwnedObjects, try the
+      // last known user/AI message IDs directly so that export still
+      // surfaces something for the current session.
+      if (history.length === 0) {
+        const directIds = [lastUserMessageId, lastAiMessageId].filter(Boolean);
+
+        for (const id of directIds) {
+          try {
+            const objResp = await fetch("https://fullnode.testnet.sui.io:443", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "sui_getObject",
+                params: [
+                  id,
+                  {
+                    showContent: true,
+                  },
+                ],
+              }),
+            });
+
+            const objJson = await objResp.json();
+            const objData = objJson?.result?.data;
+            const content = objData?.content;
+            if (!content || content.dataType !== "moveObject") continue;
+
+            const fields = content.fields || {};
+            const convField = fields.conversation_id;
+            let convIdValue = "";
+
+            if (typeof convField === "string") {
+              convIdValue = convField;
+            } else if (convField && typeof convField === "object") {
+              convIdValue = convField.id || convField.fields?.id || "";
+            }
+
+            const plaintext = await decryptMessage(
+              fields.ciphertext || [],
+              fields.nonce || [],
+              importedKey
+            );
+
+            history.push({
+              objectId: objData.objectId,
+              conversationId: convIdValue,
+              sender: fields.sender_type === 0 ? "user" : "ai",
+              timestamp: Number(fields.timestamp || 0),
+              message: plaintext,
+            });
+          } catch (e) {
+            console.error("Direct fetch of message object failed", e);
+          }
+        }
+      }
+
       // Sort by timestamp ascending for readability
       history.sort((a, b) => a.timestamp - b.timestamp);
 
-      setExportedHistory(JSON.stringify(history, null, 2));
+      if (history.length === 0) {
+        setExportedHistory(
+          JSON.stringify(
+            {
+              message:
+                "No on-chain messages found for this wallet. Try sending a new message and exporting again.",
+              entries: [],
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        setExportedHistory(JSON.stringify(history, null, 2));
+      }
     } catch (error) {
       console.error("Export history error:", error);
       setExportedHistory("Failed to export history from chain.");

@@ -327,4 +327,195 @@ module ai_chatbot::chatbot_tests {
 
         test_scenario::end(scenario);
     }
+
+    #[test, expected_failure]
+    fun test_award_points_respects_daily_cap() {
+        let ai_owner = @0x8;
+
+        let mut scenario = test_scenario::begin(ai_owner);
+
+        {
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let points_account = points::create_points_account(ctx);
+            let ai_cap = points::create_ai_point_capability(ctx);
+
+            sui::transfer::public_transfer(points_account, ai_owner);
+            sui::transfer::public_transfer(ai_cap, ai_owner);
+        };
+
+        scenario.next_tx(ai_owner);
+
+        {
+            let mut points_account = test_scenario::take_from_sender<points::PointsAccount>(&scenario);
+            let ai_cap = test_scenario::take_from_sender<points::AiPointCapability>(&scenario);
+
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let earn_event_1 = points::award_points(
+                &mut points_account,
+                &ai_cap,
+                900,
+                b"first earn",
+                86400,
+                ctx
+            );
+
+            sui::transfer::public_transfer(earn_event_1, ai_owner);
+
+            // This second award should exceed the default daily cap and fail.
+            let earn_event_2 = points::award_points(
+                &mut points_account,
+                &ai_cap,
+                200,
+                b"second earn over cap",
+                86500,
+                ctx
+            );
+
+            sui::transfer::public_transfer(earn_event_2, ai_owner);
+            sui::transfer::public_transfer(ai_cap, ai_owner);
+            sui::transfer::public_transfer(points_account, ai_owner);
+        };
+
+        test_scenario::end(scenario);
+    }
+
+    #[test]
+    fun test_daily_streak_increments_on_consecutive_days() {
+        let ai_owner = @0x9;
+
+        let mut scenario = test_scenario::begin(ai_owner);
+
+        {
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let points_account = points::create_points_account(ctx);
+            let ai_cap = points::create_ai_point_capability(ctx);
+
+            sui::transfer::public_transfer(points_account, ai_owner);
+            sui::transfer::public_transfer(ai_cap, ai_owner);
+        };
+
+        scenario.next_tx(ai_owner);
+
+        {
+            let mut points_account = test_scenario::take_from_sender<points::PointsAccount>(&scenario);
+            let ai_cap = test_scenario::take_from_sender<points::AiPointCapability>(&scenario);
+
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let ev1 = points::award_points(
+                &mut points_account,
+                &ai_cap,
+                10,
+                b"day1",
+                86400,
+                ctx
+            );
+
+            sui::transfer::public_transfer(ev1, ai_owner);
+
+            let ev2 = points::award_points(
+                &mut points_account,
+                &ai_cap,
+                10,
+                b"day2",
+                86400 * 2,
+                ctx
+            );
+
+            sui::transfer::public_transfer(ev2, ai_owner);
+
+            let streak = points::current_streak(&points_account);
+            assert!(streak == 2, 0);
+
+            sui::transfer::public_transfer(ai_cap, ai_owner);
+            sui::transfer::public_transfer(points_account, ai_owner);
+        };
+
+        test_scenario::end(scenario);
+    }
+
+    #[test, expected_failure]
+    fun test_award_points_fails_for_wrong_ai_sender() {
+        let ai_owner = @0xA;
+        let attacker = @0xB;
+
+        let mut scenario = test_scenario::begin(ai_owner);
+
+        {
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let points_account = points::create_points_account(ctx);
+            let ai_cap = points::create_ai_point_capability(ctx);
+
+            sui::transfer::public_transfer(points_account, attacker);
+            sui::transfer::public_transfer(ai_cap, attacker);
+        };
+
+        scenario.next_tx(attacker);
+
+        {
+            let mut points_account = test_scenario::take_from_sender<points::PointsAccount>(&scenario);
+            let ai_cap = test_scenario::take_from_sender<points::AiPointCapability>(&scenario);
+
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let ev = points::award_points(
+                &mut points_account,
+                &ai_cap,
+                10,
+                b"attack",
+                86400,
+                ctx
+            );
+
+            sui::transfer::public_transfer(ev, attacker);
+            sui::transfer::public_transfer(ai_cap, attacker);
+            sui::transfer::public_transfer(points_account, attacker);
+        };
+
+        test_scenario::end(scenario);
+    }
+
+    #[test, expected_failure]
+    fun test_mint_reward_fails_for_wrong_ai_sender() {
+        let ai_owner = @0xC;
+        let attacker = @0xD;
+
+        let mut scenario = test_scenario::begin(ai_owner);
+
+        {
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let treasury = reward_token::init_reward_token(1000, ctx);
+            let ai_mint_cap = reward_token::create_ai_mint_capability(ctx);
+
+            sui::transfer::public_transfer(treasury, attacker);
+            sui::transfer::public_transfer(ai_mint_cap, attacker);
+        };
+
+        scenario.next_tx(attacker);
+
+        {
+            let mut treasury = test_scenario::take_from_sender<reward_token::RewardTreasury>(&scenario);
+            let ai_mint_cap = test_scenario::take_from_sender<reward_token::AiMintCapability>(&scenario);
+
+            let ctx = test_scenario::ctx(&mut scenario);
+
+            let reward = reward_token::mint_reward(
+                &mut treasury,
+                &ai_mint_cap,
+                10,
+                ctx
+            );
+
+            sui::transfer::public_transfer(reward, attacker);
+            sui::transfer::public_transfer(ai_mint_cap, attacker);
+            sui::transfer::public_transfer(treasury, attacker);
+        };
+
+        test_scenario::end(scenario);
+    }
 }
