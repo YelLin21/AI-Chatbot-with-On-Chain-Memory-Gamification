@@ -5,6 +5,9 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const CHAT_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const FALLBACK_REPLY =
+  "I am having trouble reaching the AI service right now. Please try again in a moment.";
 
 if (!process.env.GEMINI_API_KEY) {
   console.error("Missing GEMINI_API_KEY in .env");
@@ -22,13 +25,86 @@ app.get("/", (req, res) => {
   res.json({ message: "AI Chatbot backend is running with Gemini API" });
 });
 
+const normalizeModelText = (response) => {
+  if (!response) return "";
+  if (typeof response.text === "string") return response.text;
+  if (typeof response.text === "function") return response.text() || "";
+  return "";
+};
+
+const parseModelPayload = (rawText) => {
+  if (!rawText) {
+    return {
+      reply: "No reply generated",
+      points: 5,
+    };
+  }
+
+  const trimmed = rawText.trim();
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const candidateJson = fencedMatch ? fencedMatch[1].trim() : trimmed;
+
+  try {
+    const parsed = JSON.parse(candidateJson);
+    return {
+      reply: parsed?.reply || "No reply generated",
+      points: Number(parsed?.points) || 5,
+    };
+  } catch {
+    return {
+      reply: trimmed,
+      points: 5,
+    };
+  }
+};
+
+const generateReplyWithFallbackModels = async (prompt) => {
+  let lastError;
+
+  for (const model of CHAT_MODELS) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+
+      const rawText = normalizeModelText(response);
+      return parseModelPayload(rawText);
+    } catch (error) {
+      lastError = error;
+      console.warn(`Model ${model} failed:`, error?.message || error);
+    }
+  }
+
+  throw lastError || new Error("All configured Gemini models failed");
+};
+
 app.post("/chat", async (req, res) => {
   try {
-    const { message, walletAddress } = req.body;
+    const { message, walletAddress, chatHistory = [] } = req.body;
 
     if (!message || !walletAddress) {
       return res.status(400).json({
         error: "message and walletAddress are required",
+      });
+    }
+
+    const normalizedMessage = String(message).trim();
+    const recentMessages = Array.isArray(chatHistory)
+      ? chatHistory.slice(-12)
+      : [];
+
+    const looksLikeSpam =
+      normalizedMessage.length < 5 ||
+      /^(hi|hello|ok|yo|test|h+|lol)$/i.test(normalizedMessage);
+
+    if (looksLikeSpam) {
+      return res.json({
+        success: true,
+        reply:
+          "Please ask a more meaningful question so I can help and award points fairly.",
+        points: 0,
+        flagged: "low_effort",
       });
     }
 
@@ -39,10 +115,16 @@ Rules:
 - Give a clear and short answer.
 - Be helpful and accurate.
 - Keep the reply simple for students.
-- At the end, also score this message from 1 to 10 for engagement.
+- Score engagement from 0 to 10.
+- Return 0 points for repeated or low-effort spam messages.
+- Return JSON only.
+
+Recent chat history (latest up to 12 entries):
+${JSON.stringify(recentMessages)}
+
 
 User wallet: ${walletAddress}
-User message: ${message}
+User message: ${normalizedMessage}
 
 Return your answer in this exact JSON format:
 {
@@ -51,22 +133,7 @@ Return your answer in this exact JSON format:
 }
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-
-    const rawText = response.text || "";
-
-    let parsed;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      parsed = {
-        reply: rawText || "No reply generated",
-        points: 5,
-      };
-    }
+    const parsed = await generateReplyWithFallbackModels(prompt);
 
     return res.json({
       success: true,
@@ -76,9 +143,13 @@ Return your answer in this exact JSON format:
   } catch (error) {
     console.error("Chat error:", error);
 
-    return res.status(500).json({
+    return res.json({
+      success: false,
+      degraded: true,
+      reply: FALLBACK_REPLY,
+      points: 1,
       error: "Failed to get AI response",
-      details: error.message || "Unknown error",
+      details: error?.message || "Unknown error",
     });
   }
 });

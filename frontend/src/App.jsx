@@ -49,6 +49,19 @@ const encryptMessage = async (plainText, key) => {
 
 const textToBytes = (text) => Array.from(new TextEncoder().encode(text));
 
+const decryptMessage = async (ciphertextArray, nonceArray, key) => {
+  const iv = new Uint8Array(nonceArray);
+  const cipherBytes = new Uint8Array(ciphertextArray);
+
+  const plainBuffer = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    key,
+    cipherBytes
+  );
+
+  return new TextDecoder().decode(plainBuffer);
+};
+
 function App() {
   const account = useCurrentAccount();
   const connectedWalletAddress = account?.address || "";
@@ -88,6 +101,11 @@ function App() {
   const [lastAiMessageId, setLastAiMessageId] = useState("");
   const [chainStatus, setChainStatus] = useState("");
 
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportedHistory, setExportedHistory] = useState("");
+  const [badgeRedeemMessage, setBadgeRedeemMessage] = useState("");
+  const [badgeObjectId, setBadgeObjectId] = useState("");
+
   useEffect(() => {
     const setupKey = async () => {
       if (!localKey) {
@@ -114,6 +132,9 @@ function App() {
     const savedRedeemTxDigest = localStorage.getItem("redeemTxDigest");
     const savedRewardObjectId = localStorage.getItem("rewardObjectId");
     const savedPoints = localStorage.getItem("points");
+    const savedExportedHistory = localStorage.getItem("exportedHistory");
+    const savedBadgeRedeemMessage = localStorage.getItem("badgeRedeemMessage");
+    const savedBadgeObjectId = localStorage.getItem("badgeObjectId");
 
     if (savedConversationId) setConversationId(savedConversationId);
     if (savedAiCapabilityId) setAiCapabilityId(savedAiCapabilityId);
@@ -128,6 +149,9 @@ function App() {
     if (savedRedeemTxDigest) setRedeemTxDigest(savedRedeemTxDigest);
     if (savedRewardObjectId) setRewardObjectId(savedRewardObjectId);
     if (savedPoints) setPoints(Number(savedPoints));
+    if (savedExportedHistory) setExportedHistory(savedExportedHistory);
+    if (savedBadgeRedeemMessage) setBadgeRedeemMessage(savedBadgeRedeemMessage);
+    if (savedBadgeObjectId) setBadgeObjectId(savedBadgeObjectId);
   }, []);
 
   useEffect(() => {
@@ -184,6 +208,18 @@ function App() {
     }
   }, [points]);
 
+  useEffect(() => {
+    localStorage.setItem("exportedHistory", exportedHistory);
+  }, [exportedHistory]);
+
+  useEffect(() => {
+    localStorage.setItem("badgeRedeemMessage", badgeRedeemMessage);
+  }, [badgeRedeemMessage]);
+
+  useEffect(() => {
+    localStorage.setItem("badgeObjectId", badgeObjectId);
+  }, [badgeObjectId]);
+
   const fetchCreatedObjectId = async (digest, typeName) => {
     const rpcResponse = await fetch("https://fullnode.testnet.sui.io:443", {
       method: "POST",
@@ -213,6 +249,95 @@ function App() {
     );
 
     return createdObj?.objectId || "";
+  };
+
+  const exportConversationHistory = async () => {
+    if (!connectedWalletAddress) {
+      alert("Please connect your Sui wallet first.");
+      return;
+    }
+
+    if (!conversationId) {
+      alert("Please create a conversation first.");
+      return;
+    }
+
+    if (!localKey) {
+      alert("Encryption key not ready yet. Please try again.");
+      return;
+    }
+
+    try {
+      setExportLoading(true);
+
+      const rpcResponse = await fetch("https://fullnode.testnet.sui.io:443", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "sui_getOwnedObjects",
+          params: [
+            connectedWalletAddress,
+            {
+              filter: {
+                StructType: `${PACKAGE_ID}::conversation::MessageEntry`,
+              },
+              options: {
+                showContent: true,
+              },
+            },
+          ],
+        }),
+      });
+
+      const rpcData = await rpcResponse.json();
+      const objects = rpcData?.result?.data || [];
+
+      const importedKey = await importKey(localKey);
+      const history = [];
+
+      for (const entry of objects) {
+        const content = entry?.data?.content;
+        if (!content || content.dataType !== "moveObject") continue;
+
+        const fields = content.fields || {};
+        const convField = fields.conversation_id;
+        let convIdValue = "";
+
+        if (typeof convField === "string") {
+          convIdValue = convField;
+        } else if (convField && typeof convField === "object") {
+          convIdValue = convField.id || convField.fields?.id || "";
+        }
+
+        const plaintext = await decryptMessage(
+          fields.ciphertext || [],
+          fields.nonce || [],
+          importedKey
+        );
+
+        history.push({
+          objectId: entry.data.objectId,
+          conversationId: convIdValue,
+          sender: fields.sender_type === 0 ? "user" : "ai",
+          timestamp: Number(fields.timestamp || 0),
+          message: plaintext,
+        });
+      }
+
+      // Sort by timestamp ascending for readability
+      history.sort((a, b) => a.timestamp - b.timestamp);
+
+      setExportedHistory(JSON.stringify(history, null, 2));
+    } catch (error) {
+      console.error("Export history error:", error);
+      setExportedHistory("Failed to export history from chain.");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const createConversation = async () => {
@@ -637,7 +762,6 @@ function App() {
 
     try {
       setLoading(true);
-      setPoints(null);
       setRedeemMessage("");
       setRedeemTxDigest("");
       setRewardObjectId("");
@@ -687,6 +811,7 @@ function App() {
         message: plainMessage,
         walletAddress: connectedWalletAddress,
         conversationId,
+        chatHistory: messages.slice(-12),
       });
 
       await storeAiReplyOnChain(response.data.reply);
@@ -701,7 +826,7 @@ function App() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
-      setPoints(response.data.points);
+      setPoints((prev) => (prev || 0) + (Number(response.data.points) || 0));
       setMessage("");
     } catch (error) {
       console.error("Frontend chat error:", error);
@@ -724,33 +849,135 @@ function App() {
       return;
     }
 
+    if (!points || points < 5) {
+      alert("Need at least 5 points to redeem.");
+      return;
+    }
+
+    if (!pointsAccountId || !rewardTreasuryId || !aiMintCapabilityId) {
+      alert("Please create points account, reward treasury, and AI mint capability first.");
+      return;
+    }
+
     try {
       setRedeemLoading(true);
       setRedeemMessage("");
       setRedeemTxDigest("");
       setRewardObjectId("");
+      setBadgeRedeemMessage("");
+      setBadgeObjectId("");
 
-      console.log("Sending redeem request...", {
-        walletAddress: connectedWalletAddress,
-        pointsToBurn: points || 0,
-        conversationId,
+      const pointsToBurn = points;
+      const tokenAmount = Math.max(1, Math.floor(pointsToBurn / 5));
+
+      const tx = new Transaction();
+      const timestamp = Date.now();
+
+      const rewardObj = tx.moveCall({
+        target: `${PACKAGE_ID}::redeem::redeem_points_for_tokens`,
+        arguments: [
+          tx.object(pointsAccountId),
+          tx.object(rewardTreasuryId),
+          tx.object(aiMintCapabilityId),
+          tx.pure.u64(pointsToBurn),
+          tx.pure.u64(tokenAmount),
+          tx.pure.vector("u8", textToBytes("Redeem reward tokens")),
+          tx.pure.u64(timestamp),
+        ],
       });
 
-      const response = await axios.post("http://localhost:4000/redeem", {
-        walletAddress: connectedWalletAddress,
-        pointsToBurn: points || 0,
-        conversationId,
+      tx.transferObjects([rewardObj], connectedWalletAddress);
+
+      const chainResult = await dAppKit.signAndExecuteTransaction({
+        transaction: tx,
       });
 
-      console.log("Redeem response:", response.data);
+      const digest =
+        chainResult?.Transaction?.digest ||
+        chainResult?.digest ||
+        chainResult?.transactionDigest;
 
-      setRedeemMessage(response.data.message || "Redeem successful.");
-      setRedeemTxDigest(response.data.txDigest || "");
-      setRewardObjectId(response.data.rewardObjectId || "");
+      if (!digest) {
+        throw new Error("Redeem transaction digest not found.");
+      }
+
+      const mintedRewardObjectId = await fetchCreatedObjectId(
+        digest,
+        `${PACKAGE_ID}::reward_token::RewardCoin`
+      );
+
+      setRedeemMessage(
+        `Redeem successful: burned ${pointsToBurn} points and minted ${tokenAmount} reward tokens.`
+      );
+      setRedeemTxDigest(digest);
+      setRewardObjectId(mintedRewardObjectId || "");
+      setPoints(0);
     } catch (error) {
       console.error("Redeem error:", error);
-      console.error("Redeem error response:", error?.response?.data);
       setRedeemMessage("Failed to redeem points.");
+    } finally {
+      setRedeemLoading(false);
+    }
+  };
+
+  const redeemPointsForBadge = async () => {
+    if (!connectedWalletAddress) {
+      alert("Please connect your Sui wallet first.");
+      return;
+    }
+
+    if (!points || points < 10) {
+      alert("Need at least 10 points to redeem a badge.");
+      return;
+    }
+
+    if (!pointsAccountId) {
+      alert("Please create a points account first.");
+      return;
+    }
+
+    try {
+      setRedeemLoading(true);
+      setBadgeRedeemMessage("");
+      setBadgeObjectId("");
+
+      const pointsToBurn = Math.min(points, 20);
+      const tx = new Transaction();
+      const timestamp = Date.now();
+
+      const badgeObj = tx.moveCall({
+        target: `${PACKAGE_ID}::redeem::redeem_points_for_badge`,
+        arguments: [
+          tx.object(pointsAccountId),
+          tx.pure.u64(pointsToBurn),
+          tx.pure.vector("u8", textToBytes("Study streak badge")),
+          tx.pure.u64(timestamp),
+        ],
+      });
+
+      tx.transferObjects([badgeObj], connectedWalletAddress);
+
+      const chainResult = await dAppKit.signAndExecuteTransaction({
+        transaction: tx,
+      });
+
+      const digest =
+        chainResult?.Transaction?.digest ||
+        chainResult?.digest ||
+        chainResult?.transactionDigest;
+
+      const badgeId = digest
+        ? await fetchCreatedObjectId(digest, `${PACKAGE_ID}::redeem::StudyBadge`)
+        : "";
+
+      setBadgeRedeemMessage(
+        `Redeemed ${pointsToBurn} points for a Study Badge.`
+      );
+      setBadgeObjectId(badgeId || "");
+      setPoints(points - pointsToBurn);
+    } catch (error) {
+      console.error("Redeem badge error:", error);
+      setBadgeRedeemMessage("Failed to redeem badge.");
     } finally {
       setRedeemLoading(false);
     }
@@ -766,6 +993,9 @@ function App() {
     setLastUserMessageId("");
     setLastAiMessageId("");
     setChainStatus("");
+    setExportedHistory("");
+    setBadgeRedeemMessage("");
+    setBadgeObjectId("");
     localStorage.removeItem("messages");
     localStorage.removeItem("points");
     localStorage.removeItem("lastUserMessageId");
@@ -773,6 +1003,9 @@ function App() {
     localStorage.removeItem("chainStatus");
     localStorage.removeItem("redeemTxDigest");
     localStorage.removeItem("rewardObjectId");
+    localStorage.removeItem("exportedHistory");
+    localStorage.removeItem("badgeRedeemMessage");
+    localStorage.removeItem("badgeObjectId");
   };
 
   const totalMessages = messages.length;
@@ -926,6 +1159,31 @@ function App() {
                   <p className="break-all text-sm text-slate-100">
                     {conversationId || "No conversation created yet"}
                   </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-cyan-200">
+                      Export On-Chain History
+                    </p>
+                    <button
+                      className="rounded-xl border border-cyan-300/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/70 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={exportConversationHistory}
+                      disabled={exportLoading || !connectedWalletAddress || !conversationId}
+                    >
+                      {exportLoading ? "Exporting..." : "Export"}
+                    </button>
+                  </div>
+                  <p className="mb-2 text-xs font-semibold text-slate-400">
+                    Decrypts and exports all on-chain messages for this conversation.
+                  </p>
+                  <textarea
+                    rows="6"
+                    value={exportedHistory}
+                    readOnly
+                    placeholder="Exported history will appear here as JSON after you click Export."
+                    className={`${inputBase} mt-1 resize-y text-xs`}
+                  />
                 </div>
 
                 <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
@@ -1101,6 +1359,19 @@ function App() {
                 {redeemLoading ? "Redeeming..." : "Redeem Points"}
               </button>
 
+              <button
+                className={`${actionButton} mt-3 bg-gradient-to-r from-purple-500 to-indigo-500 shadow-[0_14px_30px_rgba(129,140,248,0.3)]`}
+                onClick={redeemPointsForBadge}
+                disabled={
+                  redeemLoading ||
+                  !connectedWalletAddress ||
+                  points === null ||
+                  points < 10
+                }
+              >
+                {redeemLoading ? "Redeeming..." : "Redeem for Study Badge"}
+              </button>
+
               {redeemMessage && (
                 <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-200">
                   {redeemMessage}
@@ -1125,6 +1396,23 @@ function App() {
                   </p>
                   <p className="break-all text-sm text-slate-100">
                     {rewardObjectId}
+                  </p>
+                </div>
+              )}
+
+              {badgeRedeemMessage && (
+                <div className="mt-3 rounded-xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm leading-6 text-violet-200">
+                  {badgeRedeemMessage}
+                </div>
+              )}
+
+              {badgeObjectId && (
+                <div className="mt-3 rounded-xl border border-violet-300/20 bg-slate-900/70 px-4 py-3">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
+                    Study Badge Object ID
+                  </p>
+                  <p className="break-all text-sm text-slate-100">
+                    {badgeObjectId}
                   </p>
                 </div>
               )}

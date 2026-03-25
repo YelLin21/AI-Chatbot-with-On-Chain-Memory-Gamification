@@ -62,6 +62,27 @@ module ai_chatbot::reward_token {
         }
     }
 
+    public fun mint_reward_to_user(
+        treasury: &mut RewardTreasury,
+        cap: &AiMintCapability,
+        recipient: address,
+        amount: u64,
+        ctx: &mut TxContext
+    ): RewardCoin {
+        let ai = tx_context::sender(ctx);
+
+        assert!(cap.ai_owner == ai, E_INVALID_MINT_CAP);
+        assert!(treasury.total_minted + amount <= treasury.max_supply, E_MAX_SUPPLY_REACHED);
+
+        treasury.total_minted = treasury.total_minted + amount;
+
+        RewardCoin {
+            id: object::new(ctx),
+            amount,
+            owner: recipient,
+        }
+    }
+
     public fun burn_reward(
         treasury: &mut RewardTreasury,
         coin_obj: RewardCoin

@@ -94,4 +94,8 @@ module ai_chatbot::points {
             timestamp,
         }
     }
+
+    public fun owner_of(account: &PointsAccount): address {
+        account.owner
+    }
 }
