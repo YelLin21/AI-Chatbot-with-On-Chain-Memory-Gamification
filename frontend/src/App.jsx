@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { ConnectButton } from "@mysten/dapp-kit-react/ui";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
+import HeaderSection from "./components/HeaderSection";
+import StartConversationCard from "./components/StartConversationCard";
+import ChatHistoryCard from "./components/ChatHistoryCard";
+import PointsPanel from "./components/PointsPanel";
+import SessionStatsPanel from "./components/SessionStatsPanel";
 
 const PACKAGE_ID =
   "0x8b04f9641055ae0aaf75710200dfe440db8f0b61b38864c149d9a0168df4bf3f";
@@ -1105,426 +1109,72 @@ function App() {
       <div className="pointer-events-none absolute bottom-0 left-1/4 h-72 w-72 rounded-full bg-sky-400/20 blur-3xl"></div>
 
       <main className="relative z-10 mx-auto grid w-full max-w-7xl gap-6">
-        <section className={`${glassCard} p-6 sm:p-8`}>
-          <div className="mb-4 inline-flex rounded-full border border-cyan-300/40 bg-cyan-400/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">
-            AI Rewards Chat
-          </div>
-          <h1 className="mb-3 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-            AI Chat Dashboard
-          </h1>
-          <p className="max-w-3xl text-base leading-7 text-slate-300">
-            Ask questions, get AI responses, earn points, and redeem them in a
-            polished blockchain-ready experience.
-          </p>
-        </section>
+        <HeaderSection glassCard={glassCard} />
 
         <section className="grid gap-6 lg:grid-cols-[2.1fr_1fr]">
           <div className="grid gap-6">
-            <section className={`${glassCard} p-6 sm:p-7`}>
-              <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">
-                    Start a Conversation
-                  </h2>
-                  <p className="mt-1 text-slate-400">
-                    Connected to your Gemini-powered backend
-                  </p>
-                </div>
+            <StartConversationCard
+              glassCard={glassCard}
+              inputBase={inputBase}
+              actionButton={actionButton}
+              connectedWalletAddress={connectedWalletAddress}
+              clearChat={clearChat}
+              createConversation={createConversation}
+              creatingConversation={creatingConversation}
+              createAiCapability={createAiCapability}
+              creatingAiCap={creatingAiCap}
+              createPointsAccount={createPointsAccount}
+              creatingPointsAccount={creatingPointsAccount}
+              createAiPointCapability={createAiPointCapability}
+              creatingAiPointCap={creatingAiPointCap}
+              initRewardTreasury={initRewardTreasury}
+              creatingRewardTreasury={creatingRewardTreasury}
+              createAiMintCapability={createAiMintCapability}
+              creatingAiMintCap={creatingAiMintCap}
+              conversationId={conversationId}
+              exportConversationHistory={exportConversationHistory}
+              exportLoading={exportLoading}
+              exportedHistory={exportedHistory}
+              aiCapabilityId={aiCapabilityId}
+              pointsAccountId={pointsAccountId}
+              aiPointCapabilityId={aiPointCapabilityId}
+              rewardTreasuryId={rewardTreasuryId}
+              aiMintCapabilityId={aiMintCapabilityId}
+              chainStatus={chainStatus}
+              lastUserMessageId={lastUserMessageId}
+              lastAiMessageId={lastAiMessageId}
+              message={message}
+              setMessage={setMessage}
+              sendMessage={sendMessage}
+              loading={loading}
+            />
 
-                <div className="flex flex-wrap justify-end gap-2.5">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_14px_#34d399]"></span>
-                    Backend Live
-                  </div>
-
-                  <button
-                    className="rounded-xl border border-slate-300/25 bg-slate-900/80 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:-translate-y-0.5 hover:border-slate-200/40"
-                    onClick={clearChat}
-                  >
-                    Clear Chat
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-5 grid gap-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-cyan-200">
-                      Wallet Connection
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Connect your Sui wallet to chat and redeem
-                    </p>
-                  </div>
-
-                  <ConnectButton />
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Connected Wallet
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {connectedWalletAddress || "No wallet connected"}
-                  </p>
-                </div>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-indigo-500 to-cyan-500 shadow-[0_14px_30px_rgba(79,70,229,0.35)]`}
-                  onClick={createConversation}
-                  disabled={!connectedWalletAddress || creatingConversation}
-                >
-                  {creatingConversation
-                    ? "Creating Conversation..."
-                    : "Create On-Chain Conversation"}
-                </button>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-fuchsia-500 to-pink-500 shadow-[0_14px_30px_rgba(217,70,239,0.35)]`}
-                  onClick={createAiCapability}
-                  disabled={!connectedWalletAddress || creatingAiCap}
-                >
-                  {creatingAiCap
-                    ? "Creating AI Capability..."
-                    : "Create AI Capability"}
-                </button>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-violet-500 to-indigo-500 shadow-[0_14px_30px_rgba(99,102,241,0.35)]`}
-                  onClick={createPointsAccount}
-                  disabled={!connectedWalletAddress || creatingPointsAccount}
-                >
-                  {creatingPointsAccount
-                    ? "Creating Points Account..."
-                    : "Create Points Account"}
-                </button>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-amber-500 to-orange-500 shadow-[0_14px_30px_rgba(245,158,11,0.35)]`}
-                  onClick={createAiPointCapability}
-                  disabled={!connectedWalletAddress || creatingAiPointCap}
-                >
-                  {creatingAiPointCap
-                    ? "Creating AI Point Capability..."
-                    : "Create AI Point Capability"}
-                </button>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-emerald-500 to-lime-500 shadow-[0_14px_30px_rgba(16,185,129,0.35)]`}
-                  onClick={initRewardTreasury}
-                  disabled={!connectedWalletAddress || creatingRewardTreasury}
-                >
-                  {creatingRewardTreasury
-                    ? "Initializing Reward Treasury..."
-                    : "Init Reward Treasury"}
-                </button>
-
-                <button
-                  className={`${actionButton} bg-gradient-to-r from-rose-500 to-red-500 shadow-[0_14px_30px_rgba(244,63,94,0.35)]`}
-                  onClick={createAiMintCapability}
-                  disabled={!connectedWalletAddress || creatingAiMintCap}
-                >
-                  {creatingAiMintCap
-                    ? "Creating AI Mint Capability..."
-                    : "Create AI Mint Capability"}
-                </button>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Conversation Status
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {conversationId || "No conversation created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold uppercase tracking-wider text-cyan-200">
-                      Export On-Chain History
-                    </p>
-                    <button
-                      className="rounded-xl border border-cyan-300/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/70 disabled:cursor-not-allowed disabled:opacity-60"
-                      onClick={exportConversationHistory}
-                      disabled={exportLoading || !connectedWalletAddress || !conversationId}
-                    >
-                      {exportLoading ? "Exporting..." : "Export"}
-                    </button>
-                  </div>
-                  <p className="mb-2 text-xs font-semibold text-slate-400">
-                    Decrypts and exports all on-chain messages for this conversation.
-                  </p>
-                  <textarea
-                    rows="6"
-                    value={exportedHistory}
-                    readOnly
-                    placeholder="Exported history will appear here as JSON after you click Export."
-                    className={`${inputBase} mt-1 resize-y text-xs`}
-                  />
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    AI Capability Status
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {aiCapabilityId || "No AI capability created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Points Account ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {pointsAccountId || "No points account created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    AI Point Capability ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {aiPointCapabilityId || "No AI point capability created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Reward Treasury ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {rewardTreasuryId || "No reward treasury created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    AI Mint Capability ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {aiMintCapabilityId || "No AI mint capability created yet"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-300/15 bg-slate-900/70 p-4">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    On-Chain Message Status
-                  </p>
-                  <p className="mb-2 text-sm text-emerald-300">
-                    {chainStatus || "No message stored yet"}
-                  </p>
-
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Last User Message ID
-                  </p>
-                  <p className="mb-3 break-all text-sm text-slate-100">
-                    {lastUserMessageId || "No user message yet"}
-                  </p>
-
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Last AI Message ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {lastAiMessageId || "No AI message yet"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="mb-2 block text-sm font-semibold text-slate-200">
-                  Your Message
-                </label>
-                <textarea
-                  rows="5"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Ask something about blockchain, AI, rewards, or your project..."
-                  className={`${inputBase} resize-y`}
-                />
-              </div>
-
-              <button
-                className={`${actionButton} bg-gradient-to-r from-cyan-500 to-emerald-500 shadow-[0_14px_30px_rgba(6,182,212,0.35)]`}
-                onClick={sendMessage}
-                disabled={
-                  loading ||
-                  !connectedWalletAddress ||
-                  !conversationId ||
-                  !aiCapabilityId
-                }
-              >
-                {loading ? "Generating..." : "Send Message"}
-              </button>
-            </section>
-
-            <section className={`${glassCard} p-6 sm:p-7`}>
-              <div className="mb-5 flex items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400/15 text-lg text-cyan-200">
-                  ✦
-                </span>
-                <h3 className="text-xl font-bold text-white">Chat History</h3>
-              </div>
-
-              <div className="flex flex-col gap-3.5">
-                {messages.length === 0 ? (
-                  <p className="text-slate-400">
-                    No messages yet. Connect your wallet and start your first
-                    conversation.
-                  </p>
-                ) : (
-                  messages.map((msg, index) => (
-                    <div
-                      key={index}
-                      className={`flex ${
-                        msg.role === "user" ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[85%] rounded-2xl px-4 py-3.5 leading-7 ${
-                          msg.role === "user"
-                            ? "rounded-br-md border border-cyan-300/30 bg-cyan-500/15"
-                            : "rounded-bl-md border border-slate-300/20 bg-slate-900/85"
-                        }`}
-                      >
-                        <span className="text-xs font-bold uppercase tracking-wide text-cyan-200">
-                          {msg.role === "user" ? "You" : "AI"}
-                        </span>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200 sm:text-base">
-                          {msg.content}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
+            <ChatHistoryCard glassCard={glassCard} messages={messages} />
           </div>
 
           <aside className="grid gap-6">
-            <section className={`${glassCard} flex flex-col justify-center p-6 sm:p-7`}>
-              <div className="mb-5 flex items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400/15 text-lg text-cyan-200">
-                  ⟡
-                </span>
-                <h3 className="text-xl font-bold text-white">Points Earned</h3>
-              </div>
+            <PointsPanel
+              glassCard={glassCard}
+              actionButton={actionButton}
+              points={points}
+              redeemPoints={redeemPoints}
+              redeemPointsForBadge={redeemPointsForBadge}
+              redeemLoading={redeemLoading}
+              redeemMessage={redeemMessage}
+              redeemTxDigest={redeemTxDigest}
+              rewardObjectId={rewardObjectId}
+              badgeRedeemMessage={badgeRedeemMessage}
+              badgeObjectId={badgeObjectId}
+              connectedWalletAddress={connectedWalletAddress}
+            />
 
-              <div className="mb-2 text-5xl font-extrabold leading-none text-white">
-                {points !== null ? points : "--"}
-              </div>
-
-              <p className="mb-5 text-slate-400">
-                {points !== null
-                  ? points >= 5
-                    ? "You can redeem now"
-                    : "Need at least 5 points to redeem"
-                  : "No points yet"}
-              </p>
-
-              <button
-                className={`${actionButton} bg-gradient-to-r from-sky-500 to-emerald-500 shadow-[0_14px_30px_rgba(16,185,129,0.3)]`}
-                onClick={redeemPoints}
-                disabled={
-                  redeemLoading ||
-                  !connectedWalletAddress ||
-                  points === null ||
-                  points < 5
-                }
-              >
-                {redeemLoading ? "Redeeming..." : "Redeem Points"}
-              </button>
-
-              <button
-                className={`${actionButton} mt-3 bg-gradient-to-r from-purple-500 to-indigo-500 shadow-[0_14px_30px_rgba(129,140,248,0.3)]`}
-                onClick={redeemPointsForBadge}
-                disabled={
-                  redeemLoading ||
-                  !connectedWalletAddress ||
-                  points === null ||
-                  points < 10
-                }
-              >
-                {redeemLoading ? "Redeeming..." : "Redeem for Study Badge"}
-              </button>
-
-              {redeemMessage && (
-                <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-200">
-                  {redeemMessage}
-                </div>
-              )}
-
-              {redeemTxDigest && (
-                <div className="mt-3 rounded-xl border border-cyan-300/20 bg-slate-900/70 px-4 py-3">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Redeem Tx Digest
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {redeemTxDigest}
-                  </p>
-                </div>
-              )}
-
-              {rewardObjectId && (
-                <div className="mt-3 rounded-xl border border-cyan-300/20 bg-slate-900/70 px-4 py-3">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Reward Object ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {rewardObjectId}
-                  </p>
-                </div>
-              )}
-
-              {badgeRedeemMessage && (
-                <div className="mt-3 rounded-xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm leading-6 text-violet-200">
-                  {badgeRedeemMessage}
-                </div>
-              )}
-
-              {badgeObjectId && (
-                <div className="mt-3 rounded-xl border border-violet-300/20 bg-slate-900/70 px-4 py-3">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                    Study Badge Object ID
-                  </p>
-                  <p className="break-all text-sm text-slate-100">
-                    {badgeObjectId}
-                  </p>
-                </div>
-              )}
-            </section>
-
-            <section className={`${glassCard} p-6 sm:p-7`}>
-              <div className="mb-4 flex items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400/15 text-lg text-cyan-200">
-                  ☰
-                </span>
-                <h3 className="text-xl font-bold text-white">Session Stats</h3>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-slate-300/15 py-3 text-slate-300">
-                <span>Total Messages</span>
-                <strong className="text-white">{totalMessages}</strong>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-slate-300/15 py-3 text-slate-300">
-                <span>User Messages</span>
-                <strong className="text-white">{totalUserMessages}</strong>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-slate-300/15 py-3 text-slate-300">
-                <span>AI Messages</span>
-                <strong className="text-white">{totalAiMessages}</strong>
-              </div>
-
-              <div className="flex items-center justify-between py-3 text-slate-300">
-                <span>Wallet</span>
-                <strong className="max-w-40 break-all text-right text-white">
-                  {connectedWalletAddress || "Not connected"}
-                </strong>
-              </div>
-            </section>
+            <SessionStatsPanel
+              glassCard={glassCard}
+              totalMessages={totalMessages}
+              totalUserMessages={totalUserMessages}
+              totalAiMessages={totalAiMessages}
+              connectedWalletAddress={connectedWalletAddress}
+            />
           </aside>
         </section>
       </main>
