@@ -128,3 +128,6 @@ Move tests exercise both happy paths and access control / edge cases:
 - AI quality scoring lives off-chain in the Gemini prompt for flexibility; on-chain caps ensure safety.
 - Encryption key is stored locally in the browser for demo simplicity (not production-grade key management).
 - UI surfaces object IDs and digests so reviewers can independently inspect on-chain state.
+
+## Short Demo Link
+https://drive.google.com/file/d/1Hiv8QPVYKThB-H56d0Mzr5SricI1DUx0/view?usp=drive_link
