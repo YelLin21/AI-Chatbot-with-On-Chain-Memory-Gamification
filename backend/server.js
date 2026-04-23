@@ -5,7 +5,10 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const CHAT_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const CHAT_MODELS = [
+  process.env.GEMINI_MODEL_PRIMARY || "gemini-1.5-flash",
+  process.env.GEMINI_MODEL_FALLBACK || "gemini-1.5-flash-8b",
+];
 const FALLBACK_REPLY =
   "I am having trouble reaching the AI service right now. Please try again in a moment.";
 
@@ -30,6 +33,34 @@ const normalizeModelText = (response) => {
   if (typeof response.text === "string") return response.text;
   if (typeof response.text === "function") return response.text() || "";
   return "";
+};
+
+const getProviderStatusCode = (error) => {
+  const numericStatus = Number(error?.status);
+  if (Number.isFinite(numericStatus) && numericStatus > 0) return numericStatus;
+
+  const message = error?.message;
+  if (!message || typeof message !== "string") return 0;
+
+  const codeMatch = message.match(/"code"\s*:\s*(\d{3})/);
+  return codeMatch ? Number(codeMatch[1]) : 0;
+};
+
+const isExpectedProviderError = (error) => {
+  const status = getProviderStatusCode(error);
+  return [429, 500, 502, 503, 504].includes(status);
+};
+
+const extractRetryAfterSeconds = (error) => {
+  const retryDelayMatch = error?.message?.match(/"retryDelay"\s*:\s*"(\d+)s"/i);
+  if (retryDelayMatch) return Number(retryDelayMatch[1]);
+
+  const plainTextDelayMatch = error?.message?.match(/retry in\s+([\d.]+)s/i);
+  if (plainTextDelayMatch) {
+    return Math.ceil(Number(plainTextDelayMatch[1]));
+  }
+
+  return null;
 };
 
 const parseModelPayload = (rawText) => {
@@ -72,11 +103,22 @@ const generateReplyWithFallbackModels = async (prompt) => {
       return parseModelPayload(rawText);
     } catch (error) {
       lastError = error;
-      console.warn(`Model ${model} failed:`, error?.message || error);
+      const status = getProviderStatusCode(error);
+      console.warn(
+        `Model ${model} failed (${status || "unknown"}):`,
+        error?.message || error
+      );
     }
   }
 
-  throw lastError || new Error("All configured Gemini models failed");
+  return {
+    reply: FALLBACK_REPLY,
+    points: 1,
+    degraded: true,
+    retryAfterSeconds: extractRetryAfterSeconds(lastError),
+    failureStatus: getProviderStatusCode(lastError),
+    failureMessage: lastError?.message || "All configured Gemini models failed",
+  };
 };
 
 app.post("/chat", async (req, res) => {
@@ -135,13 +177,37 @@ Return your answer in this exact JSON format:
 
     const parsed = await generateReplyWithFallbackModels(prompt);
 
+    if (parsed.degraded) {
+      const expectedFailure = isExpectedProviderError({
+        status: parsed.failureStatus,
+      });
+
+      if (expectedFailure) {
+        console.warn(
+          "Chat degraded due to Gemini provider quota/capacity:",
+          parsed.failureMessage
+        );
+      } else {
+        console.error("Chat degraded due to unexpected provider error:", parsed.failureMessage);
+      }
+    }
+
     return res.json({
       success: true,
       reply: parsed.reply || "No reply generated",
       points: Number(parsed.points) || 5,
+      degraded: Boolean(parsed.degraded),
+      retryAfterSeconds:
+        typeof parsed.retryAfterSeconds === "number" ? parsed.retryAfterSeconds : null,
     });
   } catch (error) {
-    console.error("Chat error:", error);
+    const expectedFailure = isExpectedProviderError(error);
+
+    if (expectedFailure) {
+      console.warn("Chat degraded due to Gemini provider quota/capacity:", error?.message || error);
+    } else {
+      console.error("Chat error:", error);
+    }
 
     return res.json({
       success: false,
@@ -150,6 +216,7 @@ Return your answer in this exact JSON format:
       points: 1,
       error: "Failed to get AI response",
       details: error?.message || "Unknown error",
+      retryAfterSeconds: extractRetryAfterSeconds(error),
     });
   }
 });
