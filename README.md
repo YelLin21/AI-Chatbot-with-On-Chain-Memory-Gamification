@@ -1,8 +1,8 @@
 # AI Chatbot with On-Chain Memory and Gamification
  End-to-end Sui Move + React + Node implementation for the AI chatbot challenge.
-### Short Demo Link
+### Demo Link
 
-## https://drive.google.com/file/d/1Hiv8QPVYKThB-H56d0Mzr5SricI1DUx0/view?usp=drive_link
+## https://ai-chatbot-with-on-chain-memory-gam.vercel.app/
 
 
 
